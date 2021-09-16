@@ -3,10 +3,15 @@ package main
 import (
 	"bufio"
 	"fmt"
+	"log"
 	"net/http"
+	"net/url"
 	"os"
+	"strconv"
 	"strings"
 )
+
+// var ports []string
 
 type Position struct {
 	posX  int
@@ -29,6 +34,9 @@ type Boat struct {
 	positions []Position
 }
 
+var board Board
+var player Player
+
 // func (board *Board) checkBoatPosition(position Position) {
 // 	var bool destroyed = false
 // 	var int hitCount = 0
@@ -45,6 +53,16 @@ func (board *Board) checkBoardPositionAvalaible(position Position) bool {
 			return boat.checkBoatPositionAvalaible(position)
 		}
 	}
+	return false
+}
+
+func (board *Board) hitBoard(p Position) bool {
+	for _, boat := range board.boats {
+		if boat.hitBoat(p) {
+			return true
+		}
+	}
+
 	return false
 }
 
@@ -69,14 +87,16 @@ func (boat *Boat) checkBoatPositionHitStatus(p Position) bool {
 	return false
 }
 
-func (boat *Boat) hitBoat(p Position) {
+func (boat *Boat) hitBoat(p Position) bool {
 	for _, position := range boat.positions {
 		if position.posX != p.posX || position.posY != p.posY {
 			if !boat.checkBoatPositionHitStatus(p) {
 				position.state = true
+				return true
 			}
 		}
 	}
+	return false
 }
 
 func (boat *Boat) checkBoatPositionAvalaible(p Position) bool {
@@ -87,67 +107,117 @@ func (boat *Boat) checkBoatPositionAvalaible(p Position) bool {
 }
 
 func main() {
-
-	arg := os.Args[1]
-	// http.HandleFunc("/hit", HitHandler)
-	http.ListenAndServe(arg, nil)
-
+	go start()
+	http.HandleFunc("/hit", HitHandler)
+	port := os.Args[2]
+	username := os.Args[1]
+	addPort(username, port)
+	http.ListenAndServe(os.Args[1], nil)
 }
 
-func Hit() {
+func start() {
 	reader := bufio.NewReader(os.Stdin)
-	fmt.Println("sur quel position voulez vous tiré")
-	playerGuessInput, _ := reader.ReadString('\n')
-	playerGuessInput = strings.TrimSpace(strings.TrimSuffix(playerGuessInput, "\n"))
+
+	file, err := os.Open("ports.txt")
+
+	if err != nil {
+		log.Fatalf("failed opening file: %s", err)
+	}
+
+	scanner := bufio.NewScanner(file)
+	scanner.Split(bufio.ScanLines)
+	var playerInfo []string
+
+	for scanner.Scan() {
+		playerInfo = append(playerInfo, scanner.Text())
+	}
+
+	file.Close()
+
+	fmt.Println("sur quel joueur souhaiez vous tiré ? Selectionné un port")
+
+	for _, player := range playerInfo {
+		fmt.Println("%s\n", player)
+	}
+
+	selectedPort, _ := reader.ReadString('\n')
+
+	fmt.Println("sur quel position voulez vous tiré sur L'axe X")
+
+	posX, _ := reader.ReadString('\n')
+
+	fmt.Println("sur quel position voulez vous tiré sur L'axe Y")
+
+	posY, _ := reader.ReadString('\n')
+
+	posX = strings.TrimSpace(strings.TrimSuffix(posX, "\n"))
+	posY = strings.TrimSpace(strings.TrimSuffix(posY, "\n"))
+
+	data := url.Values{
+		"posX": {posX},
+		"posY": {posY},
+	}
+
+	resp, err := http.PostForm("http://localhost:"+selectedPort+"/hit", data)
+
+	if err != nil {
+		log.Fatalln(err)
+	}
+	fmt.Println("%v\n", resp.Body)
+	// resp.Body.Read("etat")
 
 }
 
-// func HitHandler(w http.ResponseWriter, req *http.Request) {
+func HitHandler(w http.ResponseWriter, req *http.Request) {
 
-// 	switch req.Method {
-// 	case http.MethodGet:
+	switch req.Method {
+	case http.MethodGet:
 
-// 		http.ServeFile(w, req, "add.html")
+		// http.ServeFile(w, req, "add.html")
 
-// 	case http.MethodPost:
+	case http.MethodPost:
 
-// 		if err := req.ParseForm(); err != nil {
-// 			fmt.Println("Something went bad")
-// 			fmt.Fprintln(w, "Something went bad")
-// 			return
-// 		}
+		if err := req.ParseForm(); err != nil {
+			fmt.Println("Something went bad")
+			fmt.Fprintln(w, "Something went bad")
+			return
+		}
 
-// 		for key, value := range req.PostForm {
-// 			fmt.Println(key, "=>", value)
-// 		}
+		// for key, value := range req.PostForm {
+		// 	fmt.Println(key, "=>", value)
+		// }
 
-// 		if a := req.FormValue("author"); a != "" && req.FormValue("entry") != "" {
+		if a := req.FormValue("posX"); a != "" && req.FormValue("posY") != "" {
 
-// 			authorEntry := Author{
-// 				author: req.FormValue("author"),
-// 				entry:  req.FormValue("entry"),
-// 			}
+			x, _ := strconv.Atoi(req.FormValue("posX"))
+			y, _ := strconv.Atoi(req.FormValue("posY"))
 
-// 			file, err := os.OpenFile("entries.txt", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-// 			if err != nil {
-// 				fmt.Fprintln(w, "Something went bad")
-// 				log.Fatal(err)
-// 			}
+			position := Position{
+				posX: x,
+				posY: y,
+			}
 
-// 			if authorEntry.author != os.DevNull && authorEntry.entry != os.DevNull {
+			if Board.hitBoard(position) {
+				fmt.Fprintln(w, "position: %d %d toucher", position.posX, position.posY)
+			}
 
-// 			}
+			// http.ServeFile(w, req, "add.html")
+		}
+	}
+}
 
-// 			if _, err := file.Write([]byte(authorEntry.author + ":" + authorEntry.entry + "\n")); err != nil {
-// 				log.Fatal(err)
-// 			}
+func addPort(player string, port string) {
 
-// 			if err := file.Close(); err != nil {
-// 				log.Fatal(err)
-// 			}
-// 		}
+	file, err := os.OpenFile("ports.txt", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		log.Fatal(err)
+	}
 
-// 		http.ServeFile(w, req, "add.html")
+	if _, err := file.Write([]byte(player + ":" + port + "\n")); err != nil {
+		log.Fatal(err)
+	}
 
-// 	}
-// }
+	if err := file.Close(); err != nil {
+		log.Fatal(err)
+	}
+}
