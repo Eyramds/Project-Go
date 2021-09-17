@@ -34,7 +34,7 @@ type Boat struct {
 	positions []Position
 }
 
-var board Board
+var playerBoard Board
 var player Player
 
 // func (board *Board) checkBoatPosition(position Position) {
@@ -107,12 +107,14 @@ func (boat *Boat) checkBoatPositionAvalaible(p Position) bool {
 }
 
 func main() {
-	go start()
+
 	http.HandleFunc("/hit", HitHandler)
 	port := os.Args[2]
 	username := os.Args[1]
-	addPort(username, port)
-	http.ListenAndServe(os.Args[1], nil)
+	go addPort(username, port)
+	err := http.ListenAndServe(":"+os.Args[1], nil)
+	fmt.Println(err)
+	start()
 }
 
 func start() {
@@ -141,6 +143,7 @@ func start() {
 	}
 
 	selectedPort, _ := reader.ReadString('\n')
+	selectedPort = strings.TrimSpace(strings.TrimSuffix(selectedPort, "\n"))
 
 	fmt.Println("sur quel position voulez vous tiré sur L'axe X")
 
@@ -197,9 +200,11 @@ func HitHandler(w http.ResponseWriter, req *http.Request) {
 				posY: y,
 			}
 
-			if Board.hitBoard(position) {
+			if playerBoard.hitBoard(position) {
 				fmt.Fprintln(w, "position: %d %d toucher", position.posX, position.posY)
 			}
+
+			fmt.Fprintln(w, "position: %d %d toucher", position.posX, position.posY)
 
 			// http.ServeFile(w, req, "add.html")
 		}
